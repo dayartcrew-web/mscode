@@ -405,6 +405,245 @@ pub const PROVIDER_CATALOG: &[ProviderCatalogEntry] = &[
         endpoint: Some("https://inference.tinfoil.sh/v1/chat/completions"),
         auth: AuthMethod::ApiKey,
     },
+    // --- Tier 7: Cloud / enterprise platforms --------------------------
+    // Provider-managed or account-scoped endpoints. Some require
+    // account-specific URLs (endpoint = None); supply via --endpoint.
+    ProviderCatalogEntry {
+        id: "databricks",
+        display_name: "Databricks AI Gateway",
+        endpoint: None, // requires ${DATABRICKS_HOST}
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "cloudflare-ai-gateway",
+        display_name: "Cloudflare AI Gateway",
+        endpoint: None, // requires CLOUDFLARE_ACCOUNT_ID
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "cloudflare-workers-ai",
+        display_name: "Cloudflare Workers AI",
+        endpoint: None, // requires CLOUDFLARE_ACCOUNT_ID
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "digitalocean",
+        display_name: "DigitalOcean Functions AI",
+        endpoint: Some("https://inference.do-ai.run/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "scaleway",
+        display_name: "Scaleway AI Endpoints",
+        endpoint: Some("https://api.scaleway.ai/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "vultr",
+        display_name: "Vultr Managed AI",
+        endpoint: Some("https://api.vultrinference.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "ovhcloud",
+        display_name: "OVHcloud AI Endpoints",
+        endpoint: Some("https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "gitlab",
+        display_name: "GitLab Duo",
+        endpoint: None, // requires gitlab instance base URL
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "poe",
+        display_name: "Poe",
+        endpoint: Some("https://api.poe.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "snowflake-cortex",
+        display_name: "Snowflake Cortex",
+        endpoint: None, // requires ${SNOWFLAKE_ACCOUNT}
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "meta",
+        display_name: "Meta AI",
+        endpoint: Some("https://api.meta.ai/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "google-vertex",
+        display_name: "Google Vertex AI",
+        endpoint: None, // requires project + region in URL
+        auth: AuthMethod::Both,
+    },
+    ProviderCatalogEntry {
+        id: "google-vertex-anthropic",
+        display_name: "Vertex AI (Anthropic models)",
+        endpoint: None, // requires project + region in URL
+        auth: AuthMethod::Both,
+    },
+    ProviderCatalogEntry {
+        id: "opencode-go",
+        display_name: "OpenCode Go",
+        endpoint: Some("https://opencode.ai/zen/go/v1/chat/completions"),
+        auth: AuthMethod::Both,
+    },
+    // --- Tier 8: Independent inference providers -----------------------
+    ProviderCatalogEntry {
+        id: "zai",
+        display_name: "Z.AI",
+        endpoint: Some("https://api.z.ai/api/paas/v4/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "zai-coding-plan",
+        display_name: "Z.AI Coding Plan",
+        endpoint: Some("https://api.z.ai/api/coding/paas/v4/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "chutes",
+        display_name: "Chutes AI",
+        endpoint: Some("https://llm.chutes.ai/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "deepinfra",
+        display_name: "Deep Infra",
+        endpoint: Some("https://api.deepinfra.com/v1/openai/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "nebius",
+        display_name: "Nebius Token Factory",
+        endpoint: Some("https://api.tokenfactory.nebius.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "baseten",
+        display_name: "Baseten",
+        endpoint: Some("https://inference.baseten.co/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "sakana",
+        display_name: "Sakana AI",
+        endpoint: Some("https://api.sakana.ai/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "upstage",
+        display_name: "Upstage Solar",
+        endpoint: Some("https://api.upstage.ai/v1/solar/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "venice",
+        display_name: "Venice AI",
+        endpoint: None, // requires account subdomain
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "longcat",
+        display_name: "LongCat",
+        endpoint: Some("https://api.longcat.chat/openai/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "morph",
+        display_name: "Morph LLM",
+        endpoint: Some("https://api.morphllm.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    // --- Tier 9: Chinese coding/token plans + regional variants -------
+    ProviderCatalogEntry {
+        id: "zhipuai-coding-plan",
+        display_name: "Zhipu AI Coding Plan",
+        endpoint: Some("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "minimax-cn",
+        display_name: "MiniMax (minimaxi.com)",
+        endpoint: Some("https://api.minimaxi.com/anthropic/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "minimax-cn-coding-plan",
+        display_name: "MiniMax Coding Plan (China)",
+        endpoint: Some("https://api.minimaxi.com/anthropic/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "minimax-coding-plan",
+        display_name: "MiniMax Coding Plan (Global)",
+        endpoint: Some("https://api.minimax.io/anthropic/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "tencent-coding-plan",
+        display_name: "Tencent Coding Plan",
+        endpoint: Some("https://api.lkeap.cloud.tencent.com/coding/v3/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "tencent-token-plan",
+        display_name: "Tencent Token Plan",
+        endpoint: Some("https://api.lkeap.cloud.tencent.com/plan/v3/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "tencent-tokenhub",
+        display_name: "Tencent TokenHub",
+        endpoint: Some("https://tokenhub.tencentmaas.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "stepfun-step-plan",
+        display_name: "StepFun Step Plan (China)",
+        endpoint: Some("https://api.stepfun.com/step_plan/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "stepfun-ai-step-plan",
+        display_name: "StepFun Step Plan (Global)",
+        endpoint: Some("https://api.stepfun.ai/step_plan/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "xiaomi",
+        display_name: "Xiaomi MiMo",
+        endpoint: Some("https://api.xiaomimimo.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "xiaomi-token-plan-ams",
+        display_name: "Xiaomi Token Plan (Europe)",
+        endpoint: Some("https://token-plan-ams.xiaomimimo.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "xiaomi-token-plan-cn",
+        display_name: "Xiaomi Token Plan (China)",
+        endpoint: Some("https://token-plan-cn.xiaomimimo.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "xiaomi-token-plan-sgp",
+        display_name: "Xiaomi Token Plan (Singapore)",
+        endpoint: Some("https://token-plan-sgp.xiaomimimo.com/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
+    ProviderCatalogEntry {
+        id: "kuae-cloud-coding-plan",
+        display_name: "KUAE Cloud Coding Plan",
+        endpoint: Some("https://coding-plan-endpoint.kuaecloud.net/v1/chat/completions"),
+        auth: AuthMethod::ApiKey,
+    },
 ];
 
 /// Lookup a catalog entry by provider id.
@@ -589,11 +828,64 @@ mod tests {
 
     #[test]
     fn catalog_size_is_reasonable() {
-        // Sanity: at least the 25 screenshot providers + the popular additions.
+        // Sanity: at least the 25 screenshot providers + popular additions
+        // + cloud/enterprise + coding plans + Chinese regional variants.
         assert!(
-            PROVIDER_CATALOG.len() >= 30,
-            "catalog should have at least 30 entries, got {}",
+            PROVIDER_CATALOG.len() >= 80,
+            "catalog should have at least 80 entries, got {}",
             PROVIDER_CATALOG.len()
         );
+    }
+
+    #[test]
+    fn catalog_includes_new_popular_inference_providers() {
+        // User-requested additions: z.ai plus other popular providers that
+        // were missing from the initial cut.
+        for id in [
+            "zai",
+            "zai-coding-plan",
+            "chutes",
+            "deepinfra",
+            "nebius",
+            "baseten",
+            "sakana",
+            "upstage",
+            "venice",
+            "longcat",
+            "morph",
+            "databricks",
+            "cloudflare-ai-gateway",
+            "cloudflare-workers-ai",
+            "digitalocean",
+            "scaleway",
+            "vultr",
+            "ovhcloud",
+            "gitlab",
+            "poe",
+            "snowflake-cortex",
+            "meta",
+            "google-vertex",
+            "google-vertex-anthropic",
+            "opencode-go",
+            "zhipuai-coding-plan",
+            "minimax-cn",
+            "minimax-cn-coding-plan",
+            "minimax-coding-plan",
+            "tencent-coding-plan",
+            "tencent-token-plan",
+            "tencent-tokenhub",
+            "stepfun-step-plan",
+            "stepfun-ai-step-plan",
+            "xiaomi",
+            "xiaomi-token-plan-ams",
+            "xiaomi-token-plan-cn",
+            "xiaomi-token-plan-sgp",
+            "kuae-cloud-coding-plan",
+        ] {
+            assert!(
+                is_known(id),
+                "newly-added provider `{id}` missing from catalog"
+            );
+        }
     }
 }
