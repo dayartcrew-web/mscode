@@ -1,0 +1,37 @@
+[package]
+name = "mscode-provider"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# Enable live HTTP integration tests that hit real provider endpoints.
+# Off by default to keep the test suite hermetic and offline-safe.
+live_tests = ["dep:reqwest"]
+
+[dependencies]
+mscode-shared = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+bytes = "1"
+futures-util = "0.3"
+http = "1"
+
+# HTTP client (rustls only — no openssl, no native-tls).
+# `stream` enables `bytes_stream()` for SSE; `json` for request bodies.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "stream",
+    "json",
+], optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+mockall = { workspace = true }

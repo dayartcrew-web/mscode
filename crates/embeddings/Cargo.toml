@@ -1,0 +1,20 @@
+[package]
+name = "mscode-embeddings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = ["fastembed"]
+# Enable the `FastEmbedder` implementation backed by `fastembed-rs` (ONNX).
+# The trait + `MockEmbedder` always compile; this gate lets slim builds omit
+# the ONNX dependency tree to preserve sub-200ms cold start.
+fastembed = ["dep:fastembed"]
+
+[dependencies]
+mscode-shared = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+fastembed = { workspace = true, optional = true }

@@ -1,0 +1,35 @@
+# Rust build artifacts
+/target
+**/target/
+**/*.rs.bk
+*.pdb
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test scratch
+/test_out.log
+*.log
+
+# Local research scaffold (not part of public repo)
+/user-scaffold/
+
+# Claude Code local state
+.msd/
+.masday/

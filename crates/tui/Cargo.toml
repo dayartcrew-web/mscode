@@ -1,0 +1,22 @@
+[package]
+name = "mscode-tui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+mscode-shared = { workspace = true }
+mscode-thread-store = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+ratatui = { workspace = true }
+ratatui-crossterm = "0.1"
+crossterm = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+serde_json = { workspace = true }
+mscode-state = { workspace = true }

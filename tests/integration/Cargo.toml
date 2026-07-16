@@ -1,0 +1,37 @@
+[package]
+name = "mscode-integration-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+mscode-shared = { workspace = true }
+mscode-state = { workspace = true }
+mscode-thread-store = { workspace = true }
+mscode-memories = { workspace = true }
+mscode-vector-index = { workspace = true }
+mscode-protocol = { workspace = true }
+mscode-rollout = { workspace = true }
+mscode-core = { workspace = true }
+mscode-tools = { workspace = true }
+mscode-edit-formats = { workspace = true }
+mscode-mcp-client = { workspace = true }
+mscode-mcp-server = { workspace = true }
+mscode-sandbox = { workspace = true }
+mscode-provider = { workspace = true }
+mscode-dag-runtime = { workspace = true }
+mscode-exec = { workspace = true }
+mscode-agents = { workspace = true }
+mscode-cli = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "time", "sync", "fs", "process"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tempfile = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+# (no extras — deps above already cover test code)

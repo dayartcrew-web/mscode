@@ -1,0 +1,119 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/shared",
+    "crates/config",
+    "crates/cli",
+    "crates/state",
+    "crates/thread-store",
+    "crates/memories",
+    "crates/vector-index",
+    "crates/vector-index-lancedb",
+    "crates/embeddings",
+    "crates/protocol",
+    "crates/rollout",
+    "crates/core",
+    "crates/tools",
+    "crates/edit-formats",
+    "crates/mcp-client",
+    "crates/mcp-server",
+    "crates/sandbox",
+    "crates/provider",
+    "crates/dag-runtime",
+    "crates/exec",
+    "crates/agents",
+    "crates/tui",
+    "tests/integration",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["mscode contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mscode/dag-workflow-cli-agentic"
+
+[workspace.dependencies]
+# Shared utility crates — pinned at workspace level so every member resolves to one version.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "process", "time", "io-util"] }
+tracing = "0.1"
+toml = "0.8"
+dirs = "5"
+clap = { version = "4.5", features = ["derive"] }
+
+# Database (local-first SQLite via rusqlite bundled — no system SQLite dep).
+rusqlite = { version = "0.40", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.35"
+
+# Async / traits.
+async-trait = "0.1"
+
+# Time + identifiers.
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# DAG engine. `stable_graph` feature is required: StableGraph preserves
+# NodeIndex stability across removals, which is critical for crash-recovery
+# (so saved DAG state remains valid after a node is removed mid-run).
+petgraph = { version = "0.6", features = ["stable_graph"] }
+
+# Embeddings + vector store. Use rustls variants to honor the no-openssl rule.
+fastembed = { version = "5", default-features = false, features = [
+    "ort-download-binaries-rustls-tls",
+    "hf-hub-rustls-tls",
+] }
+vectordb = "0.4"
+
+# Regex + fuzzy matching + glob for tools/edit-formats/sandbox.
+regex = "1"
+strsim = "0.11"
+glob = "0.3"
+
+# TUI (Phase 7). ratatui 0.30 + crossterm 0.28 are the latest stable
+# versions; crossterm is cross-platform (Windows ConPTY + POSIX). Both are
+# pure-Rust (no openssl / native-tls).
+ratatui = "0.30"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Dev only.
+tempfile = "3"
+mockall = "0.13"
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+# Internal crates — path dependencies so all members can share them.
+mscode-shared = { path = "crates/shared" }
+mscode-config = { path = "crates/config" }
+mscode-state = { path = "crates/state" }
+mscode-thread-store = { path = "crates/thread-store" }
+mscode-memories = { path = "crates/memories" }
+mscode-vector-index = { path = "crates/vector-index" }
+mscode-vector-index-lancedb = { path = "crates/vector-index-lancedb" }
+mscode-embeddings = { path = "crates/embeddings" }
+mscode-protocol = { path = "crates/protocol" }
+mscode-rollout = { path = "crates/rollout" }
+mscode-core = { path = "crates/core" }
+mscode-tools = { path = "crates/tools" }
+mscode-edit-formats = { path = "crates/edit-formats" }
+mscode-mcp-client = { path = "crates/mcp-client" }
+mscode-mcp-server = { path = "crates/mcp-server" }
+mscode-sandbox = { path = "crates/sandbox" }
+mscode-provider = { path = "crates/provider" }
+mscode-dag-runtime = { path = "crates/dag-runtime" }
+mscode-exec = { path = "crates/exec" }
+mscode-agents = { path = "crates/agents" }
+mscode-tui = { path = "crates/tui" }
+mscode-cli = { path = "crates/cli" }
+mscode-integration-tests = { path = "tests/integration" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"

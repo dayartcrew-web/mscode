@@ -1,0 +1,24 @@
+[package]
+name = "mscode-agents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+mscode-shared = { workspace = true }
+mscode-dag-runtime = { workspace = true }
+mscode-exec = { workspace = true }
+mscode-provider = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = { workspace = true }
+mockall = { workspace = true }
