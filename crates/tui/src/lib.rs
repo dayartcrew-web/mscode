@@ -14,6 +14,10 @@
 //! - [`slash`] — [`ParsedCommand`] + [`parse_slash_command`].
 //! - [`message_buffer`] — [`MessageBuffer`] (input history + draft).
 //! - [`session_list`] — [`SessionList`] (filterable session picker).
+//! - [`login_prompt`] — [`LoginWizard`] + [`PickerItem`] state machines for
+//!   `mscode login add` (no rendering).
+//! - [`login_render`] — ratatui rendering for [`LoginWizard`] (lazy-loaded only
+//!   when the login TUI launches).
 //! - [`app`] — [`App`] top-level state machine.
 //! - [`render`] — ratatui rendering (lazy-loaded only when the TUI launches).
 //!
@@ -30,6 +34,8 @@ pub mod app;
 pub mod config;
 pub mod error;
 pub mod events;
+pub mod login_prompt;
+pub mod login_render;
 pub mod message_buffer;
 pub mod modes;
 pub mod render;
@@ -40,6 +46,10 @@ pub use app::{App, AppExit};
 pub use config::{TuiConfig, TuiTheme};
 pub use error::TuiError;
 pub use events::{ExternalEvent, TuiEvent};
+pub use login_prompt::{
+    CUSTOM_SENTINEL_ID, LoginWizard, PickerItem, ProviderPicker, TextInput, WizardEffect,
+    WizardStep, fuzzy_match,
+};
 pub use message_buffer::MessageBuffer;
 pub use modes::{InputMode, PlanMode};
 pub use session_list::{SessionEntry, SessionList, SessionLookup};
@@ -70,6 +80,56 @@ pub fn run_on_stdout(app: &mut App) -> Result<AppExit> {
     let exit = runtime.block_on(app.run(&mut terminal));
     drop(_guard); // explicit teardown before runtime drops
     exit
+}
+
+/// Run the login wizard against stdout. Returns `Ok(Some((provider, label,`
+/// `secret)))` on completion, `Ok(None)` when the user cancels.
+///
+/// This is the wizard equivalent of [`run_on_stdout`]: it owns crossterm raw
+/// mode + alt screen setup and a synchronous read/draw loop. The caller is
+/// expected to gate this on `std::io::stdout().is_terminal()` and fall back to
+/// text prompts otherwise (so the binary remains testable under pipes).
+pub fn run_login_wizard_on_stdout(
+    catalog: Vec<PickerItem>,
+) -> Result<Option<(String, String, String)>> {
+    use std::time::Duration;
+
+    use crossterm::event::{self, Event};
+    use ratatui_crossterm::CrosstermBackend;
+
+    let stdout = std::io::stdout();
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = ratatui::Terminal::new(backend)
+        .map_err(|e| TuiError::TerminalInit(format!("failed to construct terminal: {e}")))?;
+
+    let mut wizard = LoginWizard::new(catalog);
+
+    let _guard = RawModeGuard::enable()?;
+
+    // Initial render before waiting for input so the user sees the picker
+    // immediately rather than a blank alt screen.
+    terminal
+        .draw(|f| crate::login_render::draw(f, &wizard))
+        .map_err(TuiError::Io)?;
+
+    let result = loop {
+        if event::poll(Duration::from_millis(250)).map_err(TuiError::Io)? {
+            if let Event::Key(key) = event::read().map_err(TuiError::Io)? {
+                let effect = wizard.handle_key(key);
+                match effect {
+                    WizardEffect::Continue => {}
+                    WizardEffect::Cancel => break None,
+                    WizardEffect::Finish => break wizard.result(),
+                }
+            }
+        }
+        terminal
+            .draw(|f| crate::login_render::draw(f, &wizard))
+            .map_err(TuiError::Io)?;
+    };
+
+    drop(_guard);
+    Ok(result)
 }
 
 /// RAII guard that enables raw mode + alt screen on construction and disables

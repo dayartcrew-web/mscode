@@ -453,3 +453,42 @@ fn two_harnesses_are_isolated() {
         "second harness should not see first harness's accounts: {stdout}"
     );
 }
+
+/// When stdout is NOT a TTY (as is the case for all spawned subprocesses in
+/// tests), `mscode login add` with no flags must fall through to the legacy
+/// text-prompt path rather than trying to launch the TUI wizard. Reaching the
+/// wizard would crash on crossterm raw-mode setup; reaching the text path
+/// hits EOF on `prompt_provider` and returns exit 2.
+///
+/// This test is the regression gate for the wizard's TTY check: if anyone
+/// removes the `is_stdout_tty()` guard, this test will start failing with a
+/// panic from inside the TUI rather than the expected exit-2.
+#[test]
+fn login_add_no_flags_non_tty_uses_text_fallback() {
+    let h = Harness::new();
+    // Spawn with stdin piped-empty so `prompt_provider` sees EOF immediately.
+    let out = h
+        .mscode()
+        .args(["login", "add"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn login add")
+        .wait_with_output()
+        .expect("wait_for_output");
+
+    assert!(
+        !out.status.success(),
+        "non-TTY login add with no flags should NOT exit 0; stdout={} stderr={}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    // Exit code should be 2 (the CLI's generic error code). The wizard path
+    // would have panicked or returned a different failure mode.
+    let code = out.status.code().expect("exit code");
+    assert_eq!(
+        code, 2,
+        "expected exit 2 from text-fallback EOF; got {code}"
+    );
+}

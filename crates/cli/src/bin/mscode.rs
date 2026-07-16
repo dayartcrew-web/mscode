@@ -319,9 +319,11 @@ fn print_credential_error(err: CredentialError) {
 
 /// `mscode login add` — interactive credential onboarding.
 ///
-/// Walks the user through provider, label, endpoint, and secret. The secret
-/// prompt uses rpassword so it never echoes into the terminal scrollback.
-/// Skips prompts for any field already supplied via flag.
+/// When stdout is a TTY AND none of `--provider`, `--label`, `--api-key`,
+/// `--api-key-stdin` are supplied, launches a fuzzy-search TUI wizard (the
+/// "Full TUI flow" matching `opencode auth login`). Otherwise falls back to
+/// the legacy text-prompt path (rpassword for the secret) so the command
+/// remains scriptable and CI-friendly.
 fn run_login_add(
     provider: Option<String>,
     label: Option<String>,
@@ -330,6 +332,32 @@ fn run_login_add(
     api_key_stdin: bool,
     set_default: bool,
 ) -> ExitCode {
+    // Resolve provider / label / secret. The TUI wizard path can supply all
+    // three at once; the text path resolves each independently.
+    let (provider, label, secret) = if should_launch_wizard(
+        is_stdout_tty(),
+        provider.as_ref(),
+        label.as_ref(),
+        api_key.as_ref(),
+        api_key_stdin,
+    ) {
+        match launch_login_wizard() {
+            WizardOutcome::Finished(p, l, s) => (Some(p), Some(l), Some(s)),
+            WizardOutcome::Cancelled => {
+                // Silent exit — the user explicitly bailed out.
+                return ExitCode::from(130);
+            }
+            WizardOutcome::Failed(e) => {
+                eprintln!("mscode: login wizard error: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    } else {
+        // Pass through the flag values (any that were supplied); the text-prompt
+        // path below fills in the gaps via rpassword / stdin.
+        (provider, label, api_key)
+    };
+
     let provider = match provider.or_else(prompt_provider) {
         Some(p) => p,
         None => return ExitCode::from(2),
@@ -339,8 +367,8 @@ fn run_login_add(
         None => return ExitCode::from(2),
     };
 
-    // Resolve the secret. Order of precedence: --api-key > --api-key-stdin > prompt.
-    let secret = if let Some(k) = api_key {
+    // Resolve the secret. Order of precedence: wizard > --api-key > --api-key-stdin > prompt.
+    let secret = if let Some(k) = secret {
         k
     } else if api_key_stdin {
         let mut buf = String::new();
@@ -381,6 +409,52 @@ fn run_login_add(
             print_credential_error(e);
             ExitCode::from(2)
         }
+    }
+}
+
+/// Decide whether the TUI wizard should run. We launch it only when stdout is
+/// a real terminal AND the user did not supply any of the onboarding fields
+/// via flags (otherwise the wizard would be redundant or confusing).
+fn should_launch_wizard(
+    is_tty: bool,
+    provider: Option<&String>,
+    label: Option<&String>,
+    api_key: Option<&String>,
+    api_key_stdin: bool,
+) -> bool {
+    is_tty && provider.is_none() && label.is_none() && api_key.is_none() && !api_key_stdin
+}
+
+/// Outcome of launching the login wizard.
+enum WizardOutcome {
+    /// User completed all steps.
+    Finished(String, String, String),
+    /// User cancelled (Esc on first step, or Ctrl-C anywhere).
+    Cancelled,
+    /// The wizard failed to start or render.
+    Failed(String),
+}
+
+/// Build the picker catalog from `PROVIDER_CATALOG` and launch the wizard.
+fn launch_login_wizard() -> WizardOutcome {
+    use mscode_credentials::{AuthMethod, PROVIDER_CATALOG};
+    use mscode_tui::PickerItem;
+
+    let items: Vec<PickerItem> = PROVIDER_CATALOG
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.auth,
+                AuthMethod::ApiKey | AuthMethod::Both | AuthMethod::Local
+            )
+        })
+        .map(|e| PickerItem::catalog(e.id, e.display_name, e.endpoint))
+        .collect();
+
+    match mscode_tui::run_login_wizard_on_stdout(items) {
+        Ok(Some((p, l, s))) => WizardOutcome::Finished(p, l, s),
+        Ok(None) => WizardOutcome::Cancelled,
+        Err(e) => WizardOutcome::Failed(e.to_string()),
     }
 }
 
