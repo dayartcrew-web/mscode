@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-const EXPECTED_SUBCOMMANDS: &[&str] = &["version", "new", "chat", "resume", "sessions"];
+const EXPECTED_SUBCOMMANDS: &[&str] = &["version", "new", "chat", "resume", "sessions", "login"];
 
 #[test]
 fn help_lists_all_declared_subcommands() {
@@ -46,8 +46,8 @@ fn help_subcommand_is_disabled() {
 }
 
 #[test]
-fn exactly_five_subcommands_at_launch() {
-    // Phase 7 launch surface: version, new, chat, resume, sessions.
+fn exactly_six_subcommands_at_launch() {
+    // Phase 7 launch surface: version, new, chat, resume, sessions, login.
     // This test guards against accidental subcommand creep.
     let path = std::env::var("CARGO_BIN_EXE_mscode")
         .expect("CARGO_BIN_EXE_mscode must be set by the cargo test harness");

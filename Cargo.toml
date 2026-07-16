@@ -23,6 +23,7 @@ members = [
     "crates/exec",
     "crates/agents",
     "crates/tui",
+    "crates/credentials",
     "tests/integration",
 ]
 
@@ -81,6 +82,17 @@ glob = "0.3"
 ratatui = "0.30"
 crossterm = { version = "0.28", features = ["event-stream"] }
 
+# Credentials (login). OS keyring via `keyring` (DPAPI/Keychain/Secret Service).
+# `apple-native`, `windows-native`, `sync-secret-service` cover the three
+# platforms with pure-Rust backends — no libsecret C dep, no openssl.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+rpassword = "7"
+
+# Sibling crate: cross-process claim coordination (ClaimsCoordinator),
+# AccountSet schema, StrategyKind. Path dep — `default-features = false`
+# drops the daemon feature so we don't pull axum/tower/etc.
+multi-account-core = { path = "../multi-account-core-rs", default-features = false }
+
 # Dev only.
 tempfile = "3"
 mockall = "0.13"
@@ -109,6 +121,7 @@ mscode-exec = { path = "crates/exec" }
 mscode-agents = { path = "crates/agents" }
 mscode-tui = { path = "crates/tui" }
 mscode-cli = { path = "crates/cli" }
+mscode-credentials = { path = "crates/credentials" }
 mscode-integration-tests = { path = "tests/integration" }
 
 [profile.release]

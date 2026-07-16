@@ -39,6 +39,27 @@ pub const SCHEMA: &[&str] = &[
         version INTEGER PRIMARY KEY,\
         applied_at TEXT NOT NULL\
      )",
+    // provider_accounts — managed by mscode-credentials. Stores metadata only;
+    // secret bytes live in the OS keyring keyed by `key_id`. `key_id` is
+    // immutable per account so label renames don't require re-storing secrets.
+    "CREATE TABLE IF NOT EXISTS provider_accounts (\
+        id TEXT PRIMARY KEY,\
+        provider TEXT NOT NULL,\
+        label TEXT NOT NULL,\
+        endpoint TEXT NOT NULL,\
+        key_id TEXT NOT NULL,\
+        is_default INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0,1)),\
+        status TEXT NOT NULL DEFAULT 'active',\
+        cooldown_until TEXT,\
+        last_used_at TEXT,\
+        metadata TEXT NOT NULL DEFAULT '{}',\
+        created_at TEXT NOT NULL,\
+        UNIQUE(provider, label),\
+        UNIQUE(key_id)\
+     )",
+    // one default per provider enforced by partial unique index.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_accounts_one_default \
+        ON provider_accounts(provider) WHERE is_default = 1",
 ];
 
 /// Apply every statement in [`SCHEMA`] inside a single transaction.

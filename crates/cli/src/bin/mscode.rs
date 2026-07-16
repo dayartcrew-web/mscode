@@ -18,7 +18,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use mscode_cli::{Cli, Commands};
+use mscode_cli::{Cli, Commands, LoginCommands};
+use mscode_credentials::{CredentialError, CredentialStore, NewAccount, SqliteCredentialStore};
 use mscode_shared::MscodeVersion;
 use mscode_state::AppState;
 use mscode_thread_store::{ListSessionsFilter, NewSession, SessionStore};
@@ -247,5 +248,262 @@ fn main() -> ExitCode {
         Some(Commands::Sessions { all }) => run_sessions(all),
         Some(Commands::Resume { id }) => run_resume(&id),
         Some(Commands::Chat { session }) => run_chat(session.as_deref()),
+        Some(Commands::Login(cmd)) => run_login(cmd),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// `mscode login` — credential management.
+// ---------------------------------------------------------------------------
+
+/// Dispatch a `mscode login` subcommand.
+fn run_login(cmd: LoginCommands) -> ExitCode {
+    match cmd {
+        LoginCommands::Add {
+            provider,
+            label,
+            endpoint,
+            api_key,
+            api_key_stdin,
+            set_default,
+        } => run_login_add(
+            provider,
+            label,
+            endpoint,
+            api_key,
+            api_key_stdin,
+            set_default,
+        ),
+        LoginCommands::List { provider } => run_login_list(provider.as_deref()),
+        LoginCommands::Remove { provider, label } => run_login_remove(&provider, &label),
+        LoginCommands::Use { provider, label } => run_login_use(&provider, &label),
+    }
+}
+
+/// Build a SqliteCredentialStore against the user's state.db + OS keyring.
+fn credential_store() -> Result<SqliteCredentialStore, String> {
+    let state = open_state()?;
+    Ok(SqliteCredentialStore::new(state))
+}
+
+/// Print a credential error with a user-friendly message.
+fn print_credential_error(err: CredentialError) {
+    match err {
+        CredentialError::KeyringUnavailable => {
+            eprintln!(
+                "mscode: OS keyring unavailable; set MSCODE_CREDENTIALS_FILE to opt into plaintext file fallback"
+            );
+        }
+        CredentialError::Keyring { operation, .. } => {
+            eprintln!("mscode: OS keyring {operation} failed; check platform credentials service");
+        }
+        other => eprintln!("mscode: {other}"),
+    }
+}
+
+/// `mscode login add` — interactive credential onboarding.
+///
+/// Walks the user through provider, label, endpoint, and secret. The secret
+/// prompt uses rpassword so it never echoes into the terminal scrollback.
+/// Skips prompts for any field already supplied via flag.
+fn run_login_add(
+    provider: Option<String>,
+    label: Option<String>,
+    endpoint: Option<String>,
+    api_key: Option<String>,
+    api_key_stdin: bool,
+    set_default: bool,
+) -> ExitCode {
+    let provider = match provider.or_else(prompt_provider) {
+        Some(p) => p,
+        None => return ExitCode::from(2),
+    };
+    let label = match label.or_else(prompt_label) {
+        Some(l) => l,
+        None => return ExitCode::from(2),
+    };
+
+    // Resolve the secret. Order of precedence: --api-key > --api-key-stdin > prompt.
+    let secret = if let Some(k) = api_key {
+        k
+    } else if api_key_stdin {
+        let mut buf = String::new();
+        if std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf).is_err() {
+            eprintln!("mscode: failed to read api key from stdin");
+            return ExitCode::from(2);
+        }
+        buf.trim_end_matches(['\n', '\r']).to_string()
+    } else {
+        match prompt_secret(&provider, &label) {
+            Some(s) => s,
+            None => return ExitCode::from(2),
+        }
+    };
+
+    let mut new_account = NewAccount::new(&provider, &label, &secret).with_default(set_default);
+    if let Some(ep) = endpoint {
+        new_account = new_account.with_endpoint(ep);
+    }
+
+    let store = match credential_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("mscode: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    match store.add(new_account) {
+        Ok(account) => {
+            let badge = if account.is_default { " (default)" } else { "" };
+            println!(
+                "added {} account `{}` with endpoint {}{}",
+                account.provider, account.label, account.endpoint, badge
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            print_credential_error(e);
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `mscode login list [--provider P]` — table of configured accounts.
+fn run_login_list(provider: Option<&str>) -> ExitCode {
+    let store = match credential_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("mscode: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let rows = match provider {
+        Some(p) => store.list_for_provider(p),
+        None => store.list(),
+    };
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => {
+            print_credential_error(e);
+            return ExitCode::from(2);
+        }
+    };
+    if rows.is_empty() {
+        if let Some(p) = provider {
+            println!("no accounts configured for provider `{p}`");
+        } else {
+            println!("no accounts configured; run `mscode login add` to add one");
+        }
+        return ExitCode::SUCCESS;
+    }
+    println!(
+        "{:<10} {:<14} {:<8} {:<8} ENDPOINT",
+        "PROVIDER", "LABEL", "STATUS", "DEFAULT"
+    );
+    for r in rows {
+        println!(
+            "{:<10} {:<14} {:<8} {:<8} {}",
+            r.provider,
+            r.label,
+            r.status.as_str(),
+            if r.is_default { "yes" } else { "" },
+            r.endpoint,
+        );
+    }
+    ExitCode::SUCCESS
+}
+
+/// `mscode login remove <provider> <label>` — delete credential + secret.
+fn run_login_remove(provider: &str, label: &str) -> ExitCode {
+    let store = match credential_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("mscode: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    match store.remove(provider, label) {
+        Ok(()) => {
+            println!("removed {provider}/{label}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            print_credential_error(e);
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `mscode login use <provider> <label>` — set default account.
+fn run_login_use(provider: &str, label: &str) -> ExitCode {
+    let store = match credential_store() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("mscode: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    match store.set_default(provider, label) {
+        Ok(()) => {
+            println!("default for {provider} is now `{label}`");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            print_credential_error(e);
+            ExitCode::from(2)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive prompts (rpassword). Used only by `login add`.
+// ---------------------------------------------------------------------------
+
+/// Prompt for the provider. Returns `None` on EOF / read error.
+fn prompt_provider() -> Option<String> {
+    let known = ["openai", "anthropic", "openrouter", "ollama"];
+    print!("provider [{}] or `custom:<name>`: ", known.join(", "));
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    let mut buf = String::new();
+    if std::io::stdin().read_line(&mut buf).err().is_some() {
+        return None;
+    }
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// Prompt for the account label.
+fn prompt_label() -> Option<String> {
+    print!("label (e.g. work, personal): ");
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    let mut buf = String::new();
+    if std::io::stdin().read_line(&mut buf).err().is_some() {
+        return None;
+    }
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// Prompt for the secret using rpassword (no echo).
+fn prompt_secret(provider: &str, label: &str) -> Option<String> {
+    let prompt = format!("api key for {provider}/{label}: ");
+    match rpassword::prompt_password(prompt) {
+        Ok(s) if !s.is_empty() => Some(s),
+        Ok(_) => {
+            eprintln!("mscode: empty api key");
+            None
+        }
+        Err(e) => {
+            eprintln!("mscode: failed to read api key: {e}");
+            None
+        }
     }
 }

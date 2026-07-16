@@ -82,6 +82,65 @@ pub enum Commands {
         #[arg(long)]
         all: bool,
     },
+
+    /// Manage provider credentials (API keys, OAuth tokens).
+    ///
+    /// Secrets are stored in the OS keyring (Windows DPAPI, macOS Keychain,
+    /// Linux Secret Service). Account metadata lives in the local SQLite
+    /// database. Never leaves the host.
+    #[command(subcommand)]
+    Login(LoginCommands),
+}
+
+/// Subcommands for `mscode login`.
+#[derive(Debug, Clone, Subcommand)]
+pub enum LoginCommands {
+    /// Add a new provider credential.
+    ///
+    /// Prompts interactively for any field not supplied via flag. The API key
+    /// prompt uses rpassword (no echo). For scripting, pass `--api-key` (or
+    /// `--api-key-stdin`) to skip prompts entirely.
+    Add {
+        /// Provider id (`openai`, `anthropic`, `openrouter`, `ollama`, or
+        /// `custom:<name>`). When omitted, the command prompts for it.
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// Account label (`work`, `personal`, etc.). Unique per provider.
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Custom endpoint URL. Defaults to the provider's well-known endpoint.
+        #[arg(long)]
+        endpoint: Option<String>,
+
+        /// API key (plaintext). Discouraged on shared terminals — leaves the
+        /// key in shell history. Prefer the interactive prompt.
+        #[arg(long)]
+        api_key: Option<String>,
+
+        /// Read the API key from stdin instead of prompting or using --api-key.
+        /// Useful for piping from `pass show`, `op read`, etc.
+        #[arg(long, conflicts_with = "api_key")]
+        api_key_stdin: bool,
+
+        /// Mark this account as the default for its provider.
+        #[arg(long)]
+        set_default: bool,
+    },
+
+    /// List configured credentials.
+    List {
+        /// Filter to a single provider. When omitted, lists all.
+        #[arg(long)]
+        provider: Option<String>,
+    },
+
+    /// Remove a credential and delete its secret from the keyring.
+    Remove { provider: String, label: String },
+
+    /// Set the default account for a provider.
+    Use { provider: String, label: String },
 }
 
 impl Cli {
@@ -191,5 +250,128 @@ mod tests {
             !has_help_sub,
             "`help` should NOT be a registered subcommand"
         );
+    }
+
+    #[test]
+    fn parse_login_add_with_all_flags() {
+        let cli = Cli::parse_from([
+            "mscode",
+            "login",
+            "add",
+            "--provider",
+            "openai",
+            "--label",
+            "work",
+            "--api-key",
+            "sk-abc",
+            "--endpoint",
+            "https://api.openai.com/v1",
+            "--set-default",
+        ]);
+        match cli.command {
+            Some(Commands::Login(LoginCommands::Add {
+                provider,
+                label,
+                endpoint,
+                api_key,
+                api_key_stdin,
+                set_default,
+            })) => {
+                assert_eq!(provider.as_deref(), Some("openai"));
+                assert_eq!(label.as_deref(), Some("work"));
+                assert_eq!(endpoint.as_deref(), Some("https://api.openai.com/v1"));
+                assert_eq!(api_key.as_deref(), Some("sk-abc"));
+                assert!(!api_key_stdin);
+                assert!(set_default);
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_login_add_minimal() {
+        // No flags — interactive flow handled by the binary.
+        let cli = Cli::parse_from(["mscode", "login", "add"]);
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Login(LoginCommands::Add {
+                provider: None,
+                label: None,
+                endpoint: None,
+                api_key: None,
+                api_key_stdin: false,
+                set_default: false,
+            }))
+        ));
+    }
+
+    #[test]
+    fn parse_login_add_api_key_stdin_conflicts_with_api_key() {
+        // clap should reject --api-key + --api-key-stdin together.
+        let result = Cli::try_parse_from([
+            "mscode",
+            "login",
+            "add",
+            "--api-key",
+            "sk-1",
+            "--api-key-stdin",
+        ]);
+        assert!(
+            result.is_err(),
+            "--api-key and --api-key-stdin must conflict"
+        );
+    }
+
+    #[test]
+    fn parse_login_list_all() {
+        let cli = Cli::parse_from(["mscode", "login", "list"]);
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Login(LoginCommands::List { provider: None }))
+        ));
+    }
+
+    #[test]
+    fn parse_login_list_filtered_by_provider() {
+        let cli = Cli::parse_from(["mscode", "login", "list", "--provider", "anthropic"]);
+        match cli.command {
+            Some(Commands::Login(LoginCommands::List { provider })) => {
+                assert_eq!(provider.as_deref(), Some("anthropic"));
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_login_remove_positional_args() {
+        let cli = Cli::parse_from(["mscode", "login", "remove", "openai", "work"]);
+        match cli.command {
+            Some(Commands::Login(LoginCommands::Remove { provider, label })) => {
+                assert_eq!(provider, "openai");
+                assert_eq!(label, "work");
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_login_remove_requires_both_args() {
+        let result = Cli::try_parse_from(["mscode", "login", "remove", "openai"]);
+        assert!(
+            result.is_err(),
+            "remove should require both provider and label"
+        );
+    }
+
+    #[test]
+    fn parse_login_use_positional_args() {
+        let cli = Cli::parse_from(["mscode", "login", "use", "openai", "personal"]);
+        match cli.command {
+            Some(Commands::Login(LoginCommands::Use { provider, label })) => {
+                assert_eq!(provider, "openai");
+                assert_eq!(label, "personal");
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
     }
 }
