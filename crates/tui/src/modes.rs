@@ -17,6 +17,8 @@ pub enum InputMode {
     Insert,
     /// The user typed `/` and is filtering the slash-command list.
     SlashCommand,
+    /// The user invoked `/models` and is currently in the fuzzy picker.
+    ModelsPicker,
 }
 
 /// Whether the agent runtime is allowed to execute.
@@ -54,6 +56,11 @@ impl InputMode {
     /// Returns `true` when in [`InputMode::SlashCommand`].
     pub fn is_slash_command(self) -> bool {
         matches!(self, InputMode::SlashCommand)
+    }
+
+    /// Returns `true` when in [`InputMode::ModelsPicker`].
+    pub fn is_models_picker(self) -> bool {
+        matches!(self, InputMode::ModelsPicker)
     }
 }
 

@@ -37,6 +37,7 @@ pub mod events;
 pub mod login_prompt;
 pub mod login_render;
 pub mod message_buffer;
+pub mod model_picker;
 pub mod modes;
 pub mod render;
 pub mod session_list;
@@ -51,6 +52,7 @@ pub use login_prompt::{
     WizardStep, fuzzy_match,
 };
 pub use message_buffer::MessageBuffer;
+pub use model_picker::{ModelItem, ModelPicker, ModelPickerEffect};
 pub use modes::{InputMode, PlanMode};
 pub use session_list::{SessionEntry, SessionList, SessionLookup};
 pub use slash::{ALL_SLASH_COMMANDS, ParsedCommand, SlashCommandError, parse_slash_command};

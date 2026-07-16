@@ -12,6 +12,7 @@ mscode-state = { workspace = true }
 mscode-thread-store = { workspace = true }
 mscode-tui = { workspace = true }
 mscode-credentials = { workspace = true }
+mscode-provider = { workspace = true }
 clap = { workspace = true }
 uuid = { workspace = true }
 rpassword = { workspace = true }

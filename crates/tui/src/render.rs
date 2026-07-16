@@ -92,10 +92,16 @@ fn draw_input_region(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) 
         return;
     }
 
+    if app.input_mode() == InputMode::ModelsPicker {
+        draw_models_picker(frame, app, area);
+        return;
+    }
+
     let title = match app.input_mode() {
         InputMode::Normal => "Input (press i to insert, / for commands)",
         InputMode::Insert => "Input (Esc to leave, Enter to submit, Tab to queue)",
         InputMode::SlashCommand => "Commands",
+        InputMode::ModelsPicker => "Models (picker)",
     };
     let block = Block::default().borders(Borders::ALL).title(title);
     let prompt = app.config().prompt.as_str();
@@ -105,6 +111,82 @@ fn draw_input_region(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) 
         .block(block)
         .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, area);
+}
+
+/// Accent + dim colors reused from `login_render`. Duplicated rather than
+/// sharing because the values are tiny and pulling them as `pub(crate)` would
+/// leak a styled-api surface for one render module.
+const ACCENT: Color = Color::Cyan;
+const DIM: Color = Color::DarkGray;
+
+fn draw_models_picker(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+    let picker = match app.models_picker() {
+        Some(p) => p,
+        None => return,
+    };
+
+    // Empty-items state — show a hint instead of an empty list.
+    if picker.items().is_empty() {
+        let hint = "no credentials configured — run `mscode login add` to add one";
+        let line = Line::from(vec![Span::styled(
+            format!(" {hint}"),
+            Style::default().fg(DIM),
+        )]);
+        let block = Block::default().borders(Borders::ALL).title(" Models ");
+        frame.render_widget(Paragraph::new(line).block(block), area);
+        return;
+    }
+
+    // Split the input region into a search row + list.
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(3)])
+        .split(area);
+
+    let query = picker.query();
+    let search_line = if query.is_empty() {
+        Line::from(vec![
+            Span::styled("Search: ", Style::default().fg(DIM)),
+            Span::styled("type to filter…", Style::default().fg(DIM)),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("Search: ", Style::default().fg(ACCENT)),
+            Span::raw(query),
+        ])
+    };
+    let search_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Models (filter) ");
+    frame.render_widget(Paragraph::new(search_line).block(search_block), inner[0]);
+
+    let items: Vec<ListItem> = picker
+        .filtered_indices()
+        .iter()
+        .map(|&idx| {
+            let item = &picker.items()[idx];
+            let ctx = item
+                .context_window
+                .map(|c| format!("   [{c} ctx]"))
+                .unwrap_or_default();
+            let tools = if item.supports_tools { " 🔧" } else { "" };
+            ListItem::new(format!("{}{ctx}{tools}", item.display_label))
+        })
+        .collect();
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL))
+        .highlight_style(
+            Style::default()
+                .bg(ACCENT)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+    let mut state = ratatui::widgets::ListState::default();
+    if let Some(cursor) = picker.cursor() {
+        state.select(Some(cursor));
+    }
+    frame.render_stateful_widget(list, inner[1], &mut state);
 }
 
 fn draw_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
@@ -121,6 +203,7 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
         InputMode::Normal => "NORMAL",
         InputMode::Insert => "INSERT",
         InputMode::SlashCommand => "SLASH",
+        InputMode::ModelsPicker => "MODELS",
     };
 
     let spans = vec![

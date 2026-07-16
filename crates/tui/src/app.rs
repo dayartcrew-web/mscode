@@ -17,6 +17,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::TuiError;
 use crate::config::TuiConfig;
 use crate::message_buffer::MessageBuffer;
+use crate::model_picker::{ModelItem, ModelPicker, ModelPickerEffect};
 use crate::modes::{InputMode, PlanMode};
 use crate::session_list::SessionList;
 use crate::slash::{ParsedCommand, SlashCommandError, parse_slash_command};
@@ -70,6 +71,10 @@ pub struct App {
     slash_filter: String,
     /// Cached list of slash command names matching the filter (computed on demand).
     slash_matches: Vec<String>,
+    /// Catalog items injected by the binary at startup. Empty in tests.
+    models_items: Vec<ModelItem>,
+    /// Active picker state when `input_mode == ModelsPicker`. `None` otherwise.
+    models_picker: Option<ModelPicker>,
     /// True when the user has asked to quit. The event loop checks this.
     should_quit: bool,
 }
@@ -89,8 +94,18 @@ impl App {
                 .unwrap_or_else(|_| ".".into()),
             slash_filter: String::new(),
             slash_matches: Vec::new(),
+            models_items: Vec::new(),
+            models_picker: None,
             should_quit: false,
         }
+    }
+
+    /// Inject the catalog items used by the in-TUI `/models` picker. Called by
+    /// the binary at startup. Empty `items` is valid — the picker renders a
+    /// "run `mscode login add`" hint in that case.
+    pub fn with_models(mut self, items: Vec<ModelItem>) -> Self {
+        self.models_items = items;
+        self
     }
 
     /// Override the working directory used for the `/sessions` filter.
@@ -175,6 +190,12 @@ impl App {
         }
     }
 
+    /// Borrow the active models picker. `None` unless `input_mode ==
+    /// ModelsPicker`.
+    pub fn models_picker(&self) -> Option<&ModelPicker> {
+        self.models_picker.as_ref()
+    }
+
     /// Enter SlashCommand filter mode (called when the user types `/`).
     pub fn enter_slash_mode(&mut self) {
         self.input_mode = InputMode::SlashCommand;
@@ -197,6 +218,7 @@ impl App {
             InputMode::Normal => self.handle_normal_key(key),
             InputMode::Insert => self.handle_insert_key(key),
             InputMode::SlashCommand => self.handle_slash_key(key),
+            InputMode::ModelsPicker => self.handle_models_picker_key(key),
         }
     }
 
@@ -335,6 +357,11 @@ impl App {
     /// Submit the current draft. Honors plan mode.
     ///
     /// - If the draft starts with `/`, attempt to parse a slash command.
+    /// - `/models` is special-cased: instead of dispatching, it opens the
+    ///   fuzzy picker (`input_mode = ModelsPicker`). The command is still
+    ///   surfaced via `SubmitOutcome::Command(Models)` so test harnesses can
+    ///   assert the routing. The eventual `Model { name }` outcome is emitted
+    ///   by [`Self::handle_models_picker_key`] when the user picks a row.
     /// - Otherwise, dispatch the message (or queue for approval, depending on
     ///   plan mode).
     pub fn submit_draft(&mut self) -> SubmitOutcome {
@@ -347,6 +374,17 @@ impl App {
                 Ok(Some(cmd)) => {
                     if matches!(cmd, ParsedCommand::Quit) {
                         self.should_quit = true;
+                        self.messages.set_draft("");
+                        return SubmitOutcome::Command(cmd);
+                    }
+                    if matches!(cmd, ParsedCommand::Models) {
+                        // Open the fuzzy picker. The picker is reset each time
+                        // so re-entering `/models` after a previous session
+                        // starts fresh.
+                        self.models_picker = Some(ModelPicker::new(self.models_items.clone()));
+                        self.input_mode = InputMode::ModelsPicker;
+                        self.messages.set_draft("");
+                        return SubmitOutcome::Command(cmd);
                     }
                     // Move the draft into history as a side note, then clear.
                     self.messages.set_draft("");
@@ -370,6 +408,46 @@ impl App {
                 }
             }
             None => SubmitOutcome::Empty,
+        }
+    }
+
+    /// Key handler for the `/models` fuzzy picker.
+    ///
+    /// On `Cancel` (Esc / Ctrl-C / empty list) the picker is torn down and the
+    /// app returns to Normal mode. On `Pick`, the highlighted row is converted
+    /// to `ParsedCommand::Model { name: "{provider}/{model_id}" }` — the same
+    /// outcome as `/model <name>` would have produced — and the picker is
+    /// torn down.
+    fn handle_models_picker_key(&mut self, key: KeyEvent) -> KeyOutcome {
+        let picker = match self.models_picker.as_mut() {
+            Some(p) => p,
+            None => {
+                // Invariant violation; fall back to Normal rather than panic.
+                self.input_mode = InputMode::Normal;
+                return KeyOutcome::Transitioned;
+            }
+        };
+        let effect = picker.handle_key(key);
+        match effect {
+            ModelPickerEffect::Continue => KeyOutcome::Consumed,
+            ModelPickerEffect::Cancel => {
+                self.models_picker = None;
+                self.input_mode = InputMode::Normal;
+                KeyOutcome::Transitioned
+            }
+            ModelPickerEffect::Pick => {
+                let outcome = picker.selected().map(|item| {
+                    let name = format!("{}/{}", item.provider_id, item.model_id);
+                    SubmitOutcome::Command(ParsedCommand::Model { name })
+                });
+                self.models_picker = None;
+                self.input_mode = InputMode::Normal;
+                match outcome {
+                    Some(sub) => KeyOutcome::Submitted(sub),
+                    // Defensive: picker reported Pick with no selection.
+                    None => KeyOutcome::Transitioned,
+                }
+            }
         }
     }
 
@@ -601,5 +679,144 @@ mod tests {
     fn app_with_cwd_override_uses_provided_path() {
         let app = App::new(TuiConfig::default()).with_cwd("/custom");
         assert_eq!(app.cwd(), "/custom");
+    }
+
+    // ----- /models picker integration ----------------------------------
+
+    fn models_items() -> Vec<ModelItem> {
+        vec![
+            ModelItem {
+                provider_id: "openai".into(),
+                model_id: "gpt-5".into(),
+                display_label: "OpenAI / GPT-5".into(),
+                context_window: Some(400_000),
+                supports_tools: true,
+            },
+            ModelItem {
+                provider_id: "anthropic".into(),
+                model_id: "claude-sonnet-4-6".into(),
+                display_label: "Anthropic / Claude Sonnet 4.6".into(),
+                context_window: Some(1_000_000),
+                supports_tools: true,
+            },
+        ]
+    }
+
+    fn app_with_models() -> App {
+        App::new(TuiConfig::default())
+            .with_cwd("/work")
+            .with_models(models_items())
+    }
+
+    fn invoke_models_picker(app: &mut App) {
+        app.handle_key(key(KeyCode::Char('i')));
+        for ch in "/models".chars() {
+            app.handle_key(key(KeyCode::Char(ch)));
+        }
+        let _ = app.handle_key(key(KeyCode::Enter));
+    }
+
+    #[test]
+    fn models_command_opens_picker() {
+        let mut app = app_with_models();
+        invoke_models_picker(&mut app);
+        assert_eq!(app.input_mode(), InputMode::ModelsPicker);
+        assert!(
+            app.models_picker().is_some(),
+            "picker should be initialized"
+        );
+        assert_eq!(
+            app.models_picker().unwrap().items().len(),
+            2,
+            "picker should hold injected items"
+        );
+    }
+
+    #[test]
+    fn models_picker_esc_cancels() {
+        let mut app = app_with_models();
+        invoke_models_picker(&mut app);
+        let outcome = app.handle_key(key(KeyCode::Esc));
+        assert_eq!(outcome, KeyOutcome::Transitioned);
+        assert_eq!(app.input_mode(), InputMode::Normal);
+        assert!(app.models_picker().is_none());
+    }
+
+    #[test]
+    fn models_picker_enter_emits_model_command() {
+        let mut app = app_with_models();
+        invoke_models_picker(&mut app);
+        // Default cursor is on first item (openai/gpt-5).
+        let outcome = app.handle_key(key(KeyCode::Enter));
+        match outcome {
+            KeyOutcome::Submitted(SubmitOutcome::Command(ParsedCommand::Model { name })) => {
+                assert_eq!(name, "openai/gpt-5");
+            }
+            other => panic!("expected Model command, got {other:?}"),
+        }
+        assert_eq!(app.input_mode(), InputMode::Normal);
+        assert!(app.models_picker().is_none());
+    }
+
+    #[test]
+    fn models_picker_navigation_then_enter_picks_correct_row() {
+        let mut app = app_with_models();
+        invoke_models_picker(&mut app);
+        app.handle_key(key(KeyCode::Down));
+        let outcome = app.handle_key(key(KeyCode::Enter));
+        match outcome {
+            KeyOutcome::Submitted(SubmitOutcome::Command(ParsedCommand::Model { name })) => {
+                assert_eq!(name, "anthropic/claude-sonnet-4-6");
+            }
+            other => panic!("expected anthropic model, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn models_picker_fuzzy_filter_narrows_rows() {
+        let mut app = app_with_models();
+        invoke_models_picker(&mut app);
+        for ch in "claude".chars() {
+            app.handle_key(key(KeyCode::Char(ch)));
+        }
+        let picker = app.models_picker().expect("picker still active");
+        assert_eq!(picker.filtered_indices().len(), 1);
+        // Pressing Enter should pick the only visible row.
+        let outcome = app.handle_key(key(KeyCode::Enter));
+        match outcome {
+            KeyOutcome::Submitted(SubmitOutcome::Command(ParsedCommand::Model { name })) => {
+                assert_eq!(name, "anthropic/claude-sonnet-4-6");
+            }
+            other => panic!("expected anthropic model after filter, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn models_picker_empty_items_emits_cancel() {
+        // Empty picker (no credentials) — Enter falls back to Cancel.
+        let mut app = App::new(TuiConfig::default()).with_cwd("/work");
+        // Default config has no models items injected.
+        invoke_models_picker(&mut app);
+        assert_eq!(app.input_mode(), InputMode::ModelsPicker);
+        let outcome = app.handle_key(key(KeyCode::Enter));
+        assert_eq!(outcome, KeyOutcome::Transitioned);
+        assert_eq!(app.input_mode(), InputMode::Normal);
+        assert!(app.models_picker().is_none());
+    }
+
+    #[test]
+    fn models_picker_ctrl_u_clears_query() {
+        let mut app = app_with_models();
+        invoke_models_picker(&mut app);
+        for ch in "abc".chars() {
+            app.handle_key(key(KeyCode::Char(ch)));
+        }
+        assert_eq!(
+            app.models_picker().unwrap().query(),
+            "abc",
+            "query should accumulate"
+        );
+        app.handle_key(key_ctrl(KeyCode::Char('u')));
+        assert_eq!(app.models_picker().unwrap().query(), "");
     }
 }

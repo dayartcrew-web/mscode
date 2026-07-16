@@ -1827,6 +1827,7 @@ dependencies = [
  "clap",
  "criterion",
  "mscode-credentials",
+ "mscode-provider",
  "mscode-shared",
  "mscode-state",
  "mscode-thread-store",

@@ -83,6 +83,23 @@ pub enum Commands {
         all: bool,
     },
 
+    /// List models available to configured providers.
+    ///
+    /// Defaults to the providers you have credentials for; pass `--all` to
+    /// browse the entire embedded models.dev catalog, or `--provider <id>` to
+    /// narrow to a single provider. Output is a scriptable text table on
+    /// stdout (no TTY required). Inside the chat TUI, `/models` opens an
+    /// interactive fuzzy picker over the same data.
+    Models {
+        /// Disable the credential filter (show all catalog providers).
+        #[arg(long)]
+        all: bool,
+
+        /// Narrow to a single provider id (e.g. `openai`).
+        #[arg(long)]
+        provider: Option<String>,
+    },
+
     /// Manage provider credentials (API keys, OAuth tokens).
     ///
     /// Secrets are stored in the OS keyring (Windows DPAPI, macOS Keychain,

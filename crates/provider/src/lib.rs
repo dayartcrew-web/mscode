@@ -37,6 +37,7 @@
 pub mod adapters;
 mod error;
 mod mock;
+pub mod models_catalog;
 mod provider;
 mod sse;
 mod stream;
@@ -44,6 +45,9 @@ mod types;
 
 pub use error::{ErrorKind, ProviderError};
 pub use mock::{MockLlmProvider, MockStreamScript};
+pub use models_catalog::{
+    ModelEntry, ModelLimit, ModelModalities, ModelRef, ModelsCatalog, ProviderEntry,
+};
 pub use provider::LlmProvider;
 pub use stream::{CapturingStreamSink, StreamEvent, StreamSink};
 pub use types::{

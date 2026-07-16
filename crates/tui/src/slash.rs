@@ -4,7 +4,7 @@
 //! first non-whitespace character is `/` are treated as command attempts; all
 //! other lines return `None` (the caller treats them as free-text messages).
 //!
-//! # Supported commands (EXACTLY 12)
+//! # Supported commands (EXACTLY 13)
 //!
 //! | Command          | Variant                       |
 //! | ---------------- | ----------------------------- |
@@ -14,6 +14,7 @@
 //! | `/new`           | [`ParsedCommand::New`]        |
 //! | `/compact`       | [`ParsedCommand::Compact`]    |
 //! | `/model <name>`  | [`ParsedCommand::Model`]      |
+//! | `/models`        | [`ParsedCommand::Models`]     |
 //! | `/config`        | [`ParsedCommand::Config`]     |
 //! | `/plugin`        | [`ParsedCommand::Plugin`]     |
 //! | `/memory`        | [`ParsedCommand::Memory`]     |
@@ -26,10 +27,10 @@
 //! type arbitrary text into the prompt — only leading-`/` tokens are command
 //! attempts.
 
-/// All 12 supported slash commands, in the order they appear in `--help`.
+/// All 13 supported slash commands, in the order they appear in `--help`.
 pub const ALL_SLASH_COMMANDS: &[&str] = &[
-    "help", "sessions", "resume", "new", "compact", "model", "config", "plugin", "memory",
-    "export", "clear", "quit",
+    "help", "sessions", "resume", "new", "compact", "model", "models", "config", "plugin",
+    "memory", "export", "clear", "quit",
 ];
 
 /// Memory layer filter accepted by `/memory`.
@@ -69,6 +70,10 @@ pub enum ParsedCommand {
         /// Model name (trimmed, non-empty).
         name: String,
     },
+    /// `/models` — open fuzzy picker over logged-in providers' models. The
+    /// resulting `Model { name: "{provider}/{model_id}" }` outcome is emitted
+    /// by the app layer when the user picks a row.
+    Models,
     /// `/config <key> [value]` — view (`value` is `None`) or set a config key.
     Config {
         /// Config key.
@@ -140,6 +145,7 @@ pub fn parse_slash_command(input: &str) -> Result<Option<ParsedCommand>, SlashCo
         "new" => expect_no_args(&collected, "new").map(|_| Some(ParsedCommand::New)),
         "compact" => expect_no_args(&collected, "compact").map(|_| Some(ParsedCommand::Compact)),
         "model" => parse_model(&collected),
+        "models" => expect_no_args(&collected, "models").map(|_| Some(ParsedCommand::Models)),
         "config" => parse_config(&collected),
         "plugin" => expect_no_args(&collected, "plugin").map(|_| Some(ParsedCommand::Plugin)),
         "memory" => parse_memory(&collected),
@@ -422,8 +428,19 @@ mod tests {
     }
 
     #[test]
-    fn all_slash_commands_count_is_exactly_twelve() {
-        assert_eq!(ALL_SLASH_COMMANDS.len(), 12);
+    fn parse_slash_command_models() {
+        ok_cmd!("/models", ParsedCommand::Models);
+    }
+
+    #[test]
+    fn parse_slash_command_models_rejects_args() {
+        let err = parse_slash_command("/models openai").unwrap_err();
+        assert!(matches!(err, SlashCommandError::InvalidArgument { .. }));
+    }
+
+    #[test]
+    fn all_slash_commands_count_is_exactly_thirteen() {
+        assert_eq!(ALL_SLASH_COMMANDS.len(), 13);
     }
 
     #[test]

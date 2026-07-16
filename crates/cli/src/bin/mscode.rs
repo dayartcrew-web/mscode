@@ -149,6 +149,45 @@ fn run_sessions(all: bool) -> ExitCode {
     }
 }
 
+/// `mscode models [--all] [--provider <id>]` — list models as a text table.
+///
+/// Output is scriptable: header row followed by one row per model. Empty
+/// states surface a hint instead of an empty table.
+fn run_models(all: bool, provider: Option<&str>) -> ExitCode {
+    let items = load_models_items(provider, all);
+    if items.is_empty() {
+        if all {
+            match provider {
+                Some(p) => println!("no models for provider `{p}`"),
+                None => println!("no models in catalog"),
+            }
+        } else if let Some(p) = provider {
+            println!(
+                "no models for provider `{p}`; log in with `mscode login add --provider {p}` or use `--all`"
+            );
+        } else {
+            println!("no providers configured; run `mscode login add` to add one");
+        }
+        return ExitCode::SUCCESS;
+    }
+    println!(
+        "{:<14} {:<34} {:<10} {:<6} MODEL",
+        "PROVIDER", "NAME", "CONTEXT", "TOOLS"
+    );
+    for item in items {
+        let ctx = item
+            .context_window
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "-".into());
+        let tools = if item.supports_tools { "yes" } else { "" };
+        println!(
+            "{:<14} {:<34} {:<10} {:<6} {}",
+            item.provider_id, item.display_label, ctx, tools, item.model_id
+        );
+    }
+    ExitCode::SUCCESS
+}
+
 /// `mscode resume <id>` — resolve prefix, then (in interactive contexts)
 /// launch the TUI.
 ///
@@ -230,7 +269,14 @@ fn launch_tui(session_id: Option<String>) -> ExitCode {
     use mscode_tui::TuiConfig;
 
     let _ = session_id; // The TUI loads the session via its own SessionStore.
-    let mut app = mscode_tui::App::new(TuiConfig::default());
+
+    // Inject the credential-gated catalog into the in-TUI `/models` picker.
+    // Empty items is a valid state — the picker renders a "run `mscode login
+    // add`" hint rather than a blank list. Errors are already surfaced via
+    // stderr inside the helper; here we just propagate the (possibly empty)
+    // vec.
+    let models_items = load_models_items(None, false);
+    let mut app = mscode_tui::App::new(TuiConfig::default()).with_models(models_items);
     match mscode_tui::run_on_stdout(&mut app) {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => {
@@ -248,6 +294,7 @@ fn main() -> ExitCode {
         Some(Commands::Sessions { all }) => run_sessions(all),
         Some(Commands::Resume { id }) => run_resume(&id),
         Some(Commands::Chat { session }) => run_chat(session.as_deref()),
+        Some(Commands::Models { all, provider }) => run_models(all, provider.as_deref()),
         Some(Commands::Login(cmd)) => run_login(cmd),
     }
 }
@@ -300,6 +347,89 @@ fn credential_store() -> Result<SqliteCredentialStore, String> {
         }
     }
     Ok(SqliteCredentialStore::new(state))
+}
+
+/// Build the list of models to surface in the CLI table and the in-TUI
+/// `/models` picker.
+///
+/// The two surfaces share this helper so they always agree on what's visible.
+///
+/// # Filter semantics
+///
+/// - `all == true` → every provider in the embedded catalog, regardless of
+///   credentials. Intended for `mscode models --all` (catalog browsing).
+/// - `all == false` → only providers the user has at least one credential for.
+///   Default for both `mscode models` (CLI) and `/models` (TUI).
+/// - `provider_filter == Some(p)` → narrow further to a single provider id. The
+///   filter is applied **after** the credential gate, so `--provider foo`
+///   without `--all` and without a credential for `foo` returns empty.
+///
+/// # Error handling
+///
+/// Any keyring / SQLite failure is logged to stderr and treated as "no
+/// credentials" — i.e. returns an empty vec. The caller's empty-state UX (a
+/// "run `mscode login add`" hint) handles it. We never propagate the error
+/// because both surfaces prefer degraded-but-functional output over a hard
+/// failure on a non-essential feature.
+fn load_models_items(provider_filter: Option<&str>, all: bool) -> Vec<mscode_tui::ModelItem> {
+    use std::collections::HashSet;
+
+    use mscode_provider::ModelsCatalog;
+
+    let catalog = ModelsCatalog::get();
+
+    // Resolve the set of provider ids we want to surface, then iterate the
+    // catalog once and emit ModelRefs that borrow from the &'static catalog.
+    // Owned `HashSet<String>` here so the set outlives any local String vecs
+    // built while resolving credentials.
+    let allow: HashSet<String> = if all {
+        // Catalog-browsing mode: ignore credentials entirely.
+        match provider_filter {
+            Some(p) => std::iter::once(p.to_string()).collect(),
+            None => catalog.providers().keys().cloned().collect(),
+        }
+    } else {
+        // Credential-gated mode: resolve distinct provider ids from the store.
+        let provider_ids: Vec<String> = match credential_store() {
+            Ok(store) => match store.list() {
+                Ok(accounts) => {
+                    let mut ids: Vec<String> =
+                        accounts.iter().map(|a| a.provider.clone()).collect();
+                    ids.sort();
+                    ids.dedup();
+                    ids
+                }
+                Err(e) => {
+                    eprintln!("mscode: failed to list credentials: {e}");
+                    Vec::new()
+                }
+            },
+            Err(e) => {
+                eprintln!("mscode: {e}");
+                Vec::new()
+            }
+        };
+        match provider_filter {
+            Some(p) if provider_ids.iter().any(|id| id == p) => {
+                std::iter::once(p.to_string()).collect()
+            }
+            Some(_) => HashSet::new(),
+            None => provider_ids.into_iter().collect(),
+        }
+    };
+
+    catalog
+        .all_models()
+        .into_iter()
+        .filter(|m| allow.contains(m.provider_id))
+        .map(|r| mscode_tui::ModelItem {
+            provider_id: r.provider_id.to_string(),
+            model_id: r.model.id.clone(),
+            display_label: format!("{} / {}", r.provider_name, r.model.name),
+            context_window: r.model.limit.context,
+            supports_tools: r.model.tool_call,
+        })
+        .collect()
 }
 
 /// Print a credential error with a user-friendly message.
