@@ -36,6 +36,12 @@ pub enum CredentialError {
     #[error("OS keyring unavailable; install gnome-keyring or set MSCODE_CREDENTIALS_FILE")]
     KeyringUnavailable,
 
+    /// Internal mutex poisoned by a panicking writer. Distinct from
+    /// [`CredentialError::Keyring`] so callers don't confuse a concurrency bug
+    /// with a storage failure.
+    #[error("keyring mutex poisoned")]
+    KeyringPoisoned,
+
     /// `(provider, label)` pair not found.
     #[error("no account found for provider `{provider}` label `{label}`")]
     NotFound { provider: String, label: String },

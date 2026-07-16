@@ -44,7 +44,7 @@ pub use catalog::{
     is_recommended_provider, lookup,
 };
 pub use error::{CredentialError, Result};
-pub use keyring_backend::{KeyringBackend, OSKeyringBackend};
+pub use keyring_backend::{FileKeyringBackend, KeyringBackend, OSKeyringBackend};
 pub use model::{AccountStatus, NewAccount, ProviderAccount};
 pub use sqlite::SqliteCredentialStore;
 pub use store::{CredentialStore, InMemoryCredentialStore};

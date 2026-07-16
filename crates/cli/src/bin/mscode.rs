@@ -281,8 +281,24 @@ fn run_login(cmd: LoginCommands) -> ExitCode {
 }
 
 /// Build a SqliteCredentialStore against the user's state.db + OS keyring.
+///
+/// When `MSCODE_CREDENTIALS_FILE` is set, swap the OS keyring for a
+/// plaintext-file backend. This is the explicit user opt-in for environments
+/// where the OS keyring is unavailable (headless CI, locked-down sandboxes,
+/// WSL without D-Bus secrets). The file is JSON `{key_id: secret}` and is
+/// created with `0600` permissions on POSIX.
 fn credential_store() -> Result<SqliteCredentialStore, String> {
     let state = open_state()?;
+    if let Ok(file_path) = std::env::var("MSCODE_CREDENTIALS_FILE") {
+        if !file_path.is_empty() {
+            let backend = mscode_credentials::FileKeyringBackend::new(PathBuf::from(file_path))
+                .map_err(|e| format!("failed to open MSCODE_CREDENTIALS_FILE: {e}"))?;
+            return Ok(SqliteCredentialStore::with_backend(
+                state,
+                Box::new(backend),
+            ));
+        }
+    }
     Ok(SqliteCredentialStore::new(state))
 }
 
