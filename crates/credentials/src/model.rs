@@ -180,14 +180,13 @@ pub fn validate_endpoint(endpoint: &str) -> Result<(), String> {
 
 /// Default endpoint for a provider. Returns `None` for unknown providers —
 /// callers must supply an explicit endpoint in that case.
+///
+/// Thin delegate to [`crate::catalog::default_endpoint`] so the model and
+/// catalog modules agree on the well-known endpoints. The catalog covers the
+/// full curated provider list; this function is kept for back-compat with
+/// existing call sites in `store.rs` and `sqlite.rs`.
 pub fn default_endpoint(provider: &str) -> Option<&'static str> {
-    match provider {
-        "openai" => Some("https://api.openai.com/v1/chat/completions"),
-        "anthropic" => Some("https://api.anthropic.com/v1/messages"),
-        "openrouter" => Some("https://openrouter.ai/api/v1/chat/completions"),
-        "ollama" => Some("http://localhost:11434/api/chat"),
-        _ => None,
-    }
+    crate::catalog::default_endpoint(provider)
 }
 
 #[cfg(test)]

@@ -31,12 +31,18 @@
 //! - `dead` — permanently ineligible until manually cleared; used for
 //!   terminal auth failures (revoked token, invalid_grant).
 
+pub mod catalog;
 pub mod error;
 pub mod keyring_backend;
 pub mod model;
 pub mod sqlite;
 pub mod store;
 
+pub use catalog::{
+    AuthMethod, PROVIDER_CATALOG, ProviderCatalogEntry,
+    default_endpoint as catalog_default_endpoint, display_name as catalog_display_name, is_known,
+    is_recommended_provider, lookup,
+};
 pub use error::{CredentialError, Result};
 pub use keyring_backend::{KeyringBackend, OSKeyringBackend};
 pub use model::{AccountStatus, NewAccount, ProviderAccount};

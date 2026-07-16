@@ -460,9 +460,24 @@ fn run_login_use(provider: &str, label: &str) -> ExitCode {
 // ---------------------------------------------------------------------------
 
 /// Prompt for the provider. Returns `None` on EOF / read error.
+///
+/// Shows a curated short list (recommended + popular) from the static catalog
+/// and accepts any provider id from the full catalog or a `custom:<name>`
+/// namespace. The full list lives in [`mscode_credentials::PROVIDER_CATALOG`].
 fn prompt_provider() -> Option<String> {
-    let known = ["openai", "anthropic", "openrouter", "ollama"];
-    print!("provider [{}] or `custom:<name>`: ", known.join(", "));
+    use mscode_credentials::{PROVIDER_CATALOG, is_recommended_provider};
+    let popular: Vec<&str> = PROVIDER_CATALOG
+        .iter()
+        .map(|e| e.id)
+        .filter(|id| {
+            is_recommended_provider(id)
+                || matches!(
+                    *id,
+                    "mistral" | "groq" | "deepseek" | "ollama" | "github-copilot"
+                )
+        })
+        .collect();
+    print!("provider [{}] (or `custom:<name>`): ", popular.join(", "));
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let mut buf = String::new();
     if std::io::stdin().read_line(&mut buf).err().is_some() {
